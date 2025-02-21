@@ -1,0 +1,209 @@
+# local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/bloodball/-back-ups-for-libs/main/Splix%20(OLD)"))()
+
+local Window = Library:New({Name = "Aiso", Accent = Color3.fromRGB(25, 240, 100)})
+
+local Aimbot = Window:Page({Name = "Aimbot"})
+local Visuals = Window:Page({Name = "Visuals"})
+local Misc = Window:Page({Name = "Misc"})
+
+local Aimbot_Main = Aimbot:Section({Name = "Main", Side = "Left"})
+local Visuals_ESP = Visuals:Section({Name = "ESP", Side = "Left"})  -- ESP Section under Visuals
+
+-- Silent Aim Variables
+getgenv().SilentAim_Enabled = false
+local Targetting = nil
+local FOV
+local Inset = game:GetService("GuiService"):GetGuiInset().Y
+local Mouse = game.Players.LocalPlayer:GetMouse()
+local Client = game.Players.LocalPlayer
+local Cam = workspace.CurrentCamera
+local Vector2New = Vector2.new
+
+-- Silent Aim Settings
+getgenv().Silent = {
+    Setting = {
+        IsTargetting = true,
+        Prediction = 0.119,
+        TargetPart = "HumanoidRootPart",
+        WallCheck = true,
+        FOV = {
+            Radius = 70, -- This will be controlled by the slider
+            Visible = true,
+            Filled = true -- This will toggle whether the FOV circle is filled or not
+        }
+    }
+}
+
+-- Create FOV Circle
+FOV = Drawing.new("Circle")
+FOV.Transparency = 0.5
+FOV.Thickness = 1.6
+FOV.Color = Color3.fromRGB(230, 230, 250)
+FOV.Filled = getgenv().Silent.Setting.FOV.Filled
+
+-- Update FOV Circle
+local function UpdateFOV(Radius)
+    if not FOV then return end
+    FOV.Position = Vector2New(Mouse.X, Mouse.Y + Inset)
+    FOV.Visible = getgenv().SilentAim_Enabled and getgenv().Silent.Setting.FOV.Visible -- Ensure FOV only shows when Silent Aim is enabled
+    FOV.Radius = Radius * 3.067 -- Multiply by 3.067 to scale the value
+end
+
+task.spawn(function()
+    while task.wait() do
+        if getgenv().SilentAim_Enabled then
+            UpdateFOV(getgenv().Silent.Setting.FOV.Radius)
+        else
+            FOV.Visible = false -- Hide FOV when Silent Aim is disabled
+        end
+    end
+end)
+
+-- Wall check function
+local function WallCheck(destination, ignore)
+    if getgenv().Silent.Setting.WallCheck then
+        local Origin = Cam.CFrame.p
+        local CheckRay = Ray.new(Origin, destination - Origin)
+        local Hit = game.workspace:FindPartOnRayWithIgnoreList(CheckRay, ignore)
+        return Hit == nil
+    else
+        return true
+    end
+end
+
+-- Get closest target
+local function getClosestChar()
+    local Target, Closest = nil, math.huge
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v.Character and v ~= Client and v.Character:FindFirstChild("HumanoidRootPart") then
+            local Position, OnScreen = Cam:WorldToScreenPoint(v.Character.HumanoidRootPart.Position)
+            local Distance = (Vector2New(Position.X, Position.Y) - Vector2New(Mouse.X, Mouse.Y)).Magnitude
+
+            if FOV.Radius > Distance and Distance < Closest and OnScreen and WallCheck(v.Character.HumanoidRootPart.Position, {Client, v.Character}) then
+                Closest = Distance
+                Target = v
+            end
+        end
+    end
+    return Target
+end
+
+-- Hook for mouse hit to enable Silent Aim functionality
+local Old
+Old = hookmetamethod(game, "__index", function(self, key)
+    if self:IsA("Mouse") and key == "Hit" then
+        if getgenv().SilentAim_Enabled then
+            Targetting = getClosestChar()
+            if Targetting then
+                return Targetting.Character[getgenv().Silent.Setting.TargetPart].CFrame + (Targetting.Character[getgenv().Silent.Setting.TargetPart].Velocity * getgenv().Silent.Setting.Prediction)
+            end
+        end
+    end
+    return Old(self, key)
+end)
+
+-- Enable Silent Aim function
+local function enableSilentAim()
+    if getgenv().SilentAim_Enabled then return end
+
+    print("✅ Silent Aim ENABLED")
+    getgenv().SilentAim_Enabled = true
+end
+
+-- Disable Silent Aim function
+local function disableSilentAim()
+    if not getgenv().SilentAim_Enabled then return end
+
+    print("❌ Silent Aim DISABLED")
+    getgenv().SilentAim_Enabled = false
+end
+
+-- Silent Aim Toggle
+Aimbot_Main:Toggle({
+    Name = "Silent Aim",
+    Default = false,
+    Pointer = "AimbotMain_SilentAim",
+    Callback = function(state)
+        if state then
+            enableSilentAim()
+        else
+            disableSilentAim()
+        end
+    end
+})
+
+-- Toggle to control whether FOV Circle is Filled or not
+Aimbot_Main:Toggle({
+    Name = "FOV Filled",
+    Default = true,  -- Start with filled FOV
+    Pointer = "SilentAimFOVFilled",
+    Callback = function(state)
+        getgenv().Silent.Setting.FOV.Filled = state
+        FOV.Filled = state  -- Update the FOV circle accordingly
+    end
+})
+
+-- FOV Slider to control Silent Aim FOV
+Aimbot_Main:Slider({
+    Name = "Silent Aim FOV",
+    Minimum = 30,  -- Minimum value for the FOV (you can adjust as needed)
+    Maximum = 150, -- Maximum value for the FOV (you can adjust as needed)
+    Default = 70,  -- Default value, matching the initial setting
+    Decimals = 1,  -- FOV is a float, so we can have decimals
+    Pointer = "SilentAimFOVSlider",
+    Callback = function(value)
+        getgenv().Silent.Setting.FOV.Radius = value
+    end
+})
+
+-- Prediction Slider to control Silent Aim Prediction
+Aimbot_Main:Slider({
+    Name = "Silent Aim Prediction",
+    Minimum = 0,   -- Minimum value for prediction (can be adjusted)
+    Maximum = 1,   -- Maximum value for prediction (can be adjusted)
+    Default = 0.119,  -- Default value, matching the initial setting
+    Decimals = 0.001,  -- Prediction is a float, so we can have small decimals
+    Pointer = "SilentAimPredictionSlider",
+    Callback = function(value)
+        getgenv().Silent.Setting.Prediction = value
+    end
+})
+
+-- ESP Toggle under the Visuals Tab
+Visuals_ESP:Toggle({
+    Name = "Enable ESP",
+    Default = false,
+    Pointer = "ESPEnabled",
+    Callback = function(state)
+        if state then
+            print("✅ ESP Enabled")
+            -- Code to enable ESP (you can add drawing elements here for ESP visualization)
+            game:GetService("RunService").RenderStepped:Connect(function()
+                for _, player in pairs(game.Players:GetPlayers()) do
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        -- ESP Box
+                        local Box = Drawing.new("Square")
+                        Box.Visible = true
+                        Box.Size = Vector2.new(200, 200) -- You can change this to match the player’s size
+                        Box.Position = Vector2.new(player.Character.HumanoidRootPart.Position.X, player.Character.HumanoidRootPart.Position.Y) -- You might need to adjust to get it in the right place
+                        Box.Color = Color3.fromRGB(255, 0, 0) -- Red ESP box
+                        Box.Thickness = 2
+                        Box.Filled = false
+                        
+                        -- ESP Name
+                        local NameTag = Drawing.new("Text")
+                        NameTag.Text = player.Name
+                        NameTag.Position = Vector2.new(player.Character.HumanoidRootPart.Position.X, player.Character.HumanoidRootPart.Position.Y) -- You might need to adjust
+                        NameTag.Color = Color3.fromRGB(255, 255, 255) -- White text
+                        NameTag.Size = 14
+                    end
+                end
+            end)
+        else
+            print("❌ ESP Disabled")
+            -- Code to disable ESP (remove the drawing elements)
+        end
+    end
+})
+
+Window:Initialize()
